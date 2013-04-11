@@ -1,0 +1,81 @@
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>QUnit Example</title>
+  <link rel="stylesheet" href="assets/qunit-1.11.0.css">
+  <script src="assets/qunit-1.11.0.js"></script>
+</head>
+
+  <script type="text/javascript">
+      // this is a copy of the Ember test environment
+      window.Ember = {
+        testing: true
+      };
+      window.ENV = window.ENV || {};
+
+      // Test for "hooks in ENV.EMBER_LOAD_HOOKS['hookName'] get executed"
+      ENV.EMBER_LOAD_HOOKS = ENV.EMBER_LOAD_HOOKS || {};
+      ENV.EMBER_LOAD_HOOKS.__before_ember_test_hook__ = ENV.EMBER_LOAD_HOOKS.__before_ember_test_hook__ || [];
+      ENV.__test_hook_count__ = 0;
+      ENV.EMBER_LOAD_HOOKS.__before_ember_test_hook__.push(function(object) {
+        ENV.__test_hook_count__ += object;
+      });
+
+      // Handle extending prototypes
+      QUnit.config.urlConfig.push('extendprototypes');
+
+      var extendPrototypes = QUnit.urlParams.extendprototypes;
+      ENV['EXTEND_PROTOTYPES'] = !!extendPrototypes;
+
+      // Don't worry about jQuery version
+      ENV['FORCE_JQUERY'] = true;
+
+      /* @ppcano: I do not know what it is
+      if (EmberDev.jsHint) {
+        // jsHint makes its own Object.create stub, we don't want to use this
+        ENV['STUB_OBJECT_CREATE'] = !Object.create;
+        }
+      */
+
+      ENV['EXPERIMENTAL_CONTROL_HELPER'] = true;
+  </script>
+
+<body>
+  <div id="qunit"></div>
+  <div id="qunit-fixture"></div>
+</body>
+</html>
+
+<script type="text/javascript" src="../source/app.js"></script>
+<script type="text/javascript" src="../source/tests.js"></script>
+
+
+<script type="text/javascript">
+
+    // loading dependencies
+	minispade.require('app');
+    
+    // loading unit tests
+    var regex = new RegExp('app/tests/(\S)*');
+
+    for (moduleName in minispade.modules) {
+
+        if (!minispade.modules.hasOwnProperty(moduleName)) { 
+            continue; 
+        }
+
+      match = moduleName.match(regex);
+      //console.log(moduleName);
+      if (match) {
+
+        var packageName = moduleName.replace('app/tests/','');
+        packageName = packageName.slice( 0, packageName.lastIndexOf('/') );
+
+        QUnit.module(packageName);
+        minispade.require(moduleName);
+      }
+
+
+    }
+
+</script>

@@ -1,0 +1,6 @@
+[submodule "app/packages/ember.js"]
+	path = app/packages/ember.js
+	url = git@github.com:emberjs/ember.js.git
+[submodule "app/packages/data"]
+	path = app/packages/data
+	url = git@github.com:emberjs/data.git
