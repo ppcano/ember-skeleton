@@ -5,6 +5,12 @@ App.Router.map(function() {
     this.route("show");
   });
   this.resource("route2");
+  this.resource("error");
+
+});
+
+App.ErrorRoute = Ember.Route.extend({
+
 });
 /*
 App.Route = Ember.Route.extend({

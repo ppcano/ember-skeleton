@@ -20319,10 +20319,25 @@ Ember.assert("Ember Handlebars requires Handlebars 1.0.0-rc.3 or greater. Includ
 */
 Ember.Handlebars = objectCreate(Handlebars);
 
+function makeBindings(options) {
+  var hash = options.hash,
+      hashType = options.hashTypes;
+
+  for (var prop in hash) {
+    if (hashType[prop] === 'ID') {
+      hash[prop + 'Binding'] = hash[prop];
+      hashType[prop + 'Binding'] = 'STRING';
+      delete hash[prop];
+      delete hashType[prop];
+    }
+  }
+}
+
 Ember.Handlebars.helper = function(name, value) {
   if (Ember.View.detect(value)) {
-    Ember.Handlebars.registerHelper(name, function(name, options) {
+    Ember.Handlebars.registerHelper(name, function(options) {
       Ember.assert("You can only pass attributes as parameters to a application-defined helper", arguments.length < 3);
+      makeBindings(options);
       return Ember.Handlebars.helpers.view.call(this, value, options);
     });
   } else {
@@ -28701,12 +28716,11 @@ get = function get(obj, keyName) {
     obj = null;
   }
 
-  if (!obj || keyName.indexOf('.') !== -1) {
-    Ember.assert("Cannot call get with '"+ keyName +"' on an undefined object.", obj !== undefined);
+  Ember.assert("Cannot call get with '"+ keyName +"' on an undefined object.", obj !== undefined);
+
+  if (obj === null || keyName.indexOf('.') !== -1) {
     return getPath(obj, keyName);
   }
-
-  Ember.assert("You need to provide an object and key to `get`.", !!obj && keyName);
 
   var meta = obj[META_KEY], desc = meta && meta.descs[keyName], ret;
   if (desc) {
@@ -28779,7 +28793,7 @@ var getPath = Ember._getPath = function(root, path) {
 
   parts = path.split(".");
   len = parts.length;
-  for (idx=0; root && idx<len; idx++) {
+  for (idx=0; root !== undefined && root !== null && idx<len; idx++) {
     root = get(root, parts[idx], true);
     if (root && root.isDestroyed) { return undefined; }
   }
@@ -31306,6 +31320,8 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
   @submodule ember-routing
   */
 
+  Handlebars.OutletView = Ember.ContainerView.extend(Ember._Metamorph);
+
   /**
     The `outlet` helper is a placeholder that the router will fill in with
     the appropriate template based on the current state of the application.
@@ -31349,28 +31365,6 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
     });
     ```
 
-
-    By default, outlet will create an `Ember.OutletView` instance to show the
-    view content based on the route state.
-
-    But you can also define how this content can be shown based on the view property.
-
-    ``` handlebars
-      {{outlet view="App.NavigationView"}}
-    ```
-
-    ``` handlebars
-
-    App.NavigationView = Em.View.extend({
-
-      // you can observe `outletContent` changes to represent
-      // as you desire the new route content
-      outletContent: null
-
-    });
-
-    ```
-
     @method outlet
     @for Ember.Handlebars.helpers
     @param {String} property the property on the controller
@@ -31378,17 +31372,10 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
   */
   Handlebars.registerHelper('outlet', function(property, options) {
     var outletSource;
+
     if (property && property.data && property.data.isRenderData) {
       options = property;
       property = 'main';
-    }
-    
-    var viewClass = options.hash.view; 
-    if ( viewClass ) {
-      viewClass = Ember.get(viewClass);
-      delete options.hash.view;
-    } else {
-      viewClass = Ember.OutletView;
     }
 
     outletSource = options.data.view;
@@ -31397,11 +31384,9 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
     }
 
     options.data.view.set('outletSource', outletSource);
+    options.hash.currentViewBinding = '_view.outletSource._outlets.' + property;
 
-    options.hash.outletName = property;
-    options.hash.outletContentBinding = '_view.outletSource._outlets.' + property;
-
-    return Handlebars.helpers.view.call(this, viewClass, options);
+    return Handlebars.helpers.view.call(this, Handlebars.OutletView, options);
   });
 });
 
@@ -31903,7 +31888,6 @@ minispade.require('ember-views');
 minispade.require('ember-handlebars');
 minispade.require('ember-routing/vendor/route-recognizer');
 minispade.require('ember-routing/vendor/router');
-minispade.require('ember-routing/views');
 minispade.require('ember-routing/system');
 minispade.require('ember-routing/helpers');
 minispade.require('ember-routing/ext');
@@ -33491,7 +33475,12 @@ Ember.Router.reopenClass({
         var results = this.recognizer.recognize(url);
 
         if (!results) {
-          throw new Error("No route matched the URL '" + url + "'");
+          var handler = this.getHandler('error');
+          if (handler)  {
+            results = [{handler: 'error', params: {}, isDynamic: false}];
+          } else {
+            throw new Error("No route matched the URL '" + url + "'");
+          }
         }
 
         collectObjects(this, results, 0, []);
@@ -34039,50 +34028,6 @@ Ember.Router.reopenClass({
     return Router;
   });
 
-
-});minispade.register('ember-routing/views', function() {minispade.require('ember-routing/views/outlet_view');
-
-});minispade.register('ember-routing/views/outlet_view', function() {var get = Ember.get, set = Ember.set;
-
-/**
-@module ember
-@submodule ember-routing
-*/
-
-/**
-  An `Ember.OutletView` instance will be inserted by the `outlet` helper when
-  a view type is not specified.
-
-  This view will define how to show the view content of the outlet 
-  based on the current route state.
-
-  The implementation of the `Ember.OutletView` binds its `currentView` content 
-  to the value of its outlet in the '`outletSource` view which is setup in 
-  the `connectOutlet` call.
-
-  ``` handlebars
-    {{outlet}}
-  ```
-
-  On the other hand, you can also define your own view to show the content 
-  based on your UI requirements:
-
-  ``` handlebars
-    {{outlet view=App.NavigationView}}
-  ```
-
-*/
-Ember.OutletView = Ember.ContainerView.extend(Ember._Metamorph,{
-  
-  outletName: null,
-  outletContent: null,
-
-  init: function () {
-    this._super();
-    this.bind('currentView', 'outletContent');
-  }
-                                                  
-});
 
 });minispade.register('ember-runtime/controllers', function() {minispade.require('ember-runtime/controllers/array_controller');
 minispade.require('ember-runtime/controllers/object_controller');
@@ -35322,7 +35267,7 @@ Ember.Array = Ember.Mixin.create(Ember.Enumerable, /** @scope Ember.Array.protot
     @param {Number} startIdx The starting index in the array that will change.
     @param {Number} removeAmt The number of items that will be removed. If you
       pass `null` assumes 0
-    @param {Number} addAmt The number of items that will be added  If you
+    @param {Number} addAmt The number of items that will be added. If you
       pass `null` assumes 0.
     @return {Ember.Array} receiver
   */
@@ -35356,6 +35301,20 @@ Ember.Array = Ember.Mixin.create(Ember.Enumerable, /** @scope Ember.Array.protot
     return this;
   },
 
+  /**
+    If you are implementing an object that supports `Ember.Array`, call this
+    method just after the array content changes to notify any observers and
+    invalidate any related properties. Pass the starting index of the change
+    as well as a delta of the amounts to change.
+
+    @method arrayContentDidChange
+    @param {Number} startIdx The starting index in the array that did change.
+    @param {Number} removeAmt The number of items that were removed. If you
+      pass `null` assumes 0
+    @param {Number} addAmt The number of items that were added. If you
+      pass `null` assumes 0.
+    @return {Ember.Array} receiver
+  */
   arrayContentDidChange: function(startIdx, removeAmt, addAmt) {
 
     // if no args are passed assume everything changes
@@ -37557,7 +37516,7 @@ Ember.Observable = Ember.Mixin.create(/** @scope Ember.Observable.prototype */ {
     @return {Object} The new property value
   */
   incrementProperty: function(keyName, increment) {
-    if (!increment) { increment = 1; }
+    if (Ember.isNone(increment)) { increment = 1; }
     set(this, keyName, (get(this, keyName) || 0)+increment);
     return get(this, keyName);
   },
@@ -37576,7 +37535,7 @@ Ember.Observable = Ember.Mixin.create(/** @scope Ember.Observable.prototype */ {
     @return {Object} The new property value
   */
   decrementProperty: function(keyName, increment) {
-    if (!increment) { increment = 1; }
+    if (Ember.isNone(increment)) { increment = 1; }
     set(this, keyName, (get(this, keyName) || 0)-increment);
     return get(this, keyName);
   },
@@ -46952,6 +46911,12 @@ App.Router.map(function() {
     this.route("show");
   });
   this.resource("route2");
+  this.resource("error");
+
+});
+
+App.ErrorRoute = Ember.Route.extend({
+
 });
 /*
 App.Route = Ember.Route.extend({
@@ -47063,6 +47028,16 @@ function program3(depth0,data) {
   data.buffer.push(escapeExpression(((stack1 = helpers.outlet),stack1 ? stack1.call(depth0, options) : helperMissing.call(depth0, "outlet", options))));
   data.buffer.push("\n  </div>\n\n</div>\n\n");
   return buffer;
+  
+});
+
+Ember.TEMPLATES['error'] = Ember.Handlebars.template(function anonymous(Handlebars,depth0,helpers,partials,data) {
+this.compilerInfo = [2,'>= 1.0.0-rc.3'];
+helpers = helpers || Ember.Handlebars.helpers; data = data || {};
+  
+
+
+  data.buffer.push("ERROR\n");
   
 });
 
