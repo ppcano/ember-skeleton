@@ -27,7 +27,7 @@ input "app"  do
 	end
 
 	match "templates/**/*.hbs" do
-    filter CustomHandlebarsPrecompiler
+    filter CustomHandlebarsPrecompiler, :base_path => "templates/"
 		concat "app.js"
     filter AddHandlebarsDependencies
 	end

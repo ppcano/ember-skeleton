@@ -1,12 +1,12 @@
 <div id="wrapper">
 
   <div id="sidebar">
-    {{#linkTo "route1"}}Router1{{/linkTo}}
+    {{#linkTo "route1.index"}}Router1{{/linkTo}}
     {{#linkTo "route2"}}Router2{{/linkTo}}
   </div>
 
   <div id="content">
-    {{outlet}}
+    {{outlet view=App.FadeView}}
   </div>
 
 </div>

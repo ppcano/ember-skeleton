@@ -52,6 +52,7 @@ END
   def initialize(options={}, &block)
     super(&block)
     @inline = options[:inline]
+    @base_path = options[:base_path]
   end
 
   def precompile_inline_templates(data)
@@ -65,12 +66,15 @@ END
   end
 
   def generate_output(inputs, output)
+
     inputs.each do |input|
       result = File.read(input.fullpath)
       if @inline 
         precompile_inline_templates(result)
       else 
-        name = File.basename(input.path, '.*')
+        name = input.path.dup
+        name.slice!(@base_path)
+        name.slice! ".hbs"
         result = precompile_hbs_templates(name, result)
       end
       output.write result

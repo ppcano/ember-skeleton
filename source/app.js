@@ -31306,8 +31306,6 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
   @submodule ember-routing
   */
 
-  Handlebars.OutletView = Ember.ContainerView.extend(Ember._Metamorph);
-
   /**
     The `outlet` helper is a placeholder that the router will fill in with
     the appropriate template based on the current state of the application.
@@ -31351,6 +31349,28 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
     });
     ```
 
+
+    By default, outlet will create an `Ember.OutletView` instance to show the
+    view content based on the route state.
+
+    But you can also define how this content can be shown based on the view property.
+
+    ``` handlebars
+      {{outlet view="App.NavigationView"}}
+    ```
+
+    ``` handlebars
+
+    App.NavigationView = Em.View.extend({
+
+      // you can observe `outletContent` changes to represent
+      // as you desire the new route content
+      outletContent: null
+
+    });
+
+    ```
+
     @method outlet
     @for Ember.Handlebars.helpers
     @param {String} property the property on the controller
@@ -31358,10 +31378,17 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
   */
   Handlebars.registerHelper('outlet', function(property, options) {
     var outletSource;
-
     if (property && property.data && property.data.isRenderData) {
       options = property;
       property = 'main';
+    }
+    
+    var viewClass = options.hash.view; 
+    if ( viewClass ) {
+      viewClass = Ember.get(viewClass);
+      delete options.hash.view;
+    } else {
+      viewClass = Ember.OutletView;
     }
 
     outletSource = options.data.view;
@@ -31370,9 +31397,11 @@ Ember.onLoad('Ember.Handlebars', function(Handlebars) {
     }
 
     options.data.view.set('outletSource', outletSource);
-    options.hash.currentViewBinding = '_view.outletSource._outlets.' + property;
 
-    return Handlebars.helpers.view.call(this, Handlebars.OutletView, options);
+    options.hash.outletName = property;
+    options.hash.outletContentBinding = '_view.outletSource._outlets.' + property;
+
+    return Handlebars.helpers.view.call(this, viewClass, options);
   });
 });
 
@@ -31874,6 +31903,7 @@ minispade.require('ember-views');
 minispade.require('ember-handlebars');
 minispade.require('ember-routing/vendor/route-recognizer');
 minispade.require('ember-routing/vendor/router');
+minispade.require('ember-routing/views');
 minispade.require('ember-routing/system');
 minispade.require('ember-routing/helpers');
 minispade.require('ember-routing/ext');
@@ -34009,6 +34039,50 @@ Ember.Router.reopenClass({
     return Router;
   });
 
+
+});minispade.register('ember-routing/views', function() {minispade.require('ember-routing/views/outlet_view');
+
+});minispade.register('ember-routing/views/outlet_view', function() {var get = Ember.get, set = Ember.set;
+
+/**
+@module ember
+@submodule ember-routing
+*/
+
+/**
+  An `Ember.OutletView` instance will be inserted by the `outlet` helper when
+  a view type is not specified.
+
+  This view will define how to show the view content of the outlet 
+  based on the current route state.
+
+  The implementation of the `Ember.OutletView` binds its `currentView` content 
+  to the value of its outlet in the '`outletSource` view which is setup in 
+  the `connectOutlet` call.
+
+  ``` handlebars
+    {{outlet}}
+  ```
+
+  On the other hand, you can also define your own view to show the content 
+  based on your UI requirements:
+
+  ``` handlebars
+    {{outlet view=App.NavigationView}}
+  ```
+
+*/
+Ember.OutletView = Ember.ContainerView.extend(Ember._Metamorph,{
+  
+  outletName: null,
+  outletContent: null,
+
+  init: function () {
+    this._super();
+    this.bind('currentView', 'outletContent');
+  }
+                                                  
+});
 
 });minispade.register('ember-runtime/controllers', function() {minispade.require('ember-runtime/controllers/array_controller');
 minispade.require('ember-runtime/controllers/object_controller');
@@ -46867,26 +46941,20 @@ Ember.View.states = states;
     return RSVP;
   });
 
-});minispade.register('app/ext/outlet', function() {
-Handlebars.OutletView = Ember.ContainerView.extend();
-
-});minispade.register('app', function() {console.log('loading main app');
-minispade.require('app/ext/outlet');
-minispade.require('app/system/application');
+});minispade.register('app', function() {minispade.require('app/system/application');
+minispade.require('app/views/fade_view');
 minispade.require('app/router/config');
 
 });minispade.register('app/router/config', function() {
 App.Router.map(function() {
-  this.route("route1");
-  this.route("route2");
+  this.resource("route1", function() {
+    this.route("index");
+    this.route("show");
+  });
+  this.resource("route2");
 });
-
+/*
 App.Route = Ember.Route.extend({
-
-  renderTemplate: function() {
-    console.log('rendering template');
-    this.render();
-  }
 
 });
 
@@ -46897,9 +46965,55 @@ App.Route1Router = App.Route.extend({
 App.Route2Router = App.Route.extend({
 
 });
+*/
 
 });minispade.register('app/system/application', function() {App = Em.Application.create({
 
+  customEvents: {
+    webkitTransitionEnd:  'transitionEnd'
+  }
+
+});
+
+});minispade.register('app/views/fade_view', function() {var get = Ember.get, set = Ember.set;
+
+//https://github.com/billysbilling/ember-animated-outlet/blob/master/src/sass/effects/_fade.scss
+App.FadeView = Ember.ContainerView.extend({
+
+  classNames: ['animated-outlet'],
+
+  outletName: null,
+  outletContent: null,
+
+  init: function () {
+    this._super();
+    this._outletContentAfter();
+  },
+
+  _outletContentAfter: Em.observer(function() {
+
+    var newContent = get(this, 'outletContent');
+    if (newContent) {
+
+      var newView = Em.ContainerView.create({
+
+        classNames: ['fade-container'],
+        classNameBindings: ['isOut'],
+        isOut: false,
+
+        currentView: newContent,
+        transitionEnd: function() {
+          this.removeFromParent();
+        }
+      });
+
+      var oldView = this.objectAt(0);
+      if (oldView) {
+        set(oldView, 'isOut', true);
+      }
+      this.pushObject(newView);
+    }
+  }, 'outletContent')
 
 });
 
@@ -46934,7 +47048,7 @@ function program3(depth0,data) {
   data.buffer.push("<div id=\"wrapper\">\n\n  <div id=\"sidebar\">\n    ");
   hashTypes = {};
   options = {hash:{},inverse:self.noop,fn:self.program(1, program1, data),contexts:[depth0],types:["STRING"],hashTypes:hashTypes,data:data};
-  stack2 = ((stack1 = helpers.linkTo),stack1 ? stack1.call(depth0, "route1", options) : helperMissing.call(depth0, "linkTo", "route1", options));
+  stack2 = ((stack1 = helpers.linkTo),stack1 ? stack1.call(depth0, "route1.index", options) : helperMissing.call(depth0, "linkTo", "route1.index", options));
   if(stack2 || stack2 === 0) { data.buffer.push(stack2); }
   data.buffer.push("\n    ");
   hashTypes = {};
@@ -46942,8 +47056,11 @@ function program3(depth0,data) {
   stack2 = ((stack1 = helpers.linkTo),stack1 ? stack1.call(depth0, "route2", options) : helperMissing.call(depth0, "linkTo", "route2", options));
   if(stack2 || stack2 === 0) { data.buffer.push(stack2); }
   data.buffer.push("\n  </div>\n\n  <div id=\"content\">\n    ");
-  hashTypes = {};
-  data.buffer.push(escapeExpression(helpers._triageMustache.call(depth0, "outlet", {hash:{},contexts:[depth0],types:["ID"],hashTypes:hashTypes,data:data})));
+  hashTypes = {'view': "ID"};
+  options = {hash:{
+    'view': ("App.FadeView")
+  },contexts:[],types:[],hashTypes:hashTypes,data:data};
+  data.buffer.push(escapeExpression(((stack1 = helpers.outlet),stack1 ? stack1.call(depth0, options) : helperMissing.call(depth0, "outlet", options))));
   data.buffer.push("\n  </div>\n\n</div>\n\n");
   return buffer;
   
@@ -46952,10 +47069,56 @@ function program3(depth0,data) {
 Ember.TEMPLATES['route1'] = Ember.Handlebars.template(function anonymous(Handlebars,depth0,helpers,partials,data) {
 this.compilerInfo = [2,'>= 1.0.0-rc.3'];
 helpers = helpers || Ember.Handlebars.helpers; data = data || {};
+  var buffer = '', hashTypes, escapeExpression=this.escapeExpression;
+
+
+  data.buffer.push("Route1 \n\n<div>\n  ");
+  hashTypes = {};
+  data.buffer.push(escapeExpression(helpers._triageMustache.call(depth0, "outlet", {hash:{},contexts:[depth0],types:["ID"],hashTypes:hashTypes,data:data})));
+  data.buffer.push("\n</div>\n");
+  return buffer;
   
+});
 
+Ember.TEMPLATES['route1/index'] = Ember.Handlebars.template(function anonymous(Handlebars,depth0,helpers,partials,data) {
+this.compilerInfo = [2,'>= 1.0.0-rc.3'];
+helpers = helpers || Ember.Handlebars.helpers; data = data || {};
+  var buffer = '', stack1, stack2, hashTypes, options, self=this, helperMissing=helpers.helperMissing;
 
-  data.buffer.push("Route 1!!\n");
+function program1(depth0,data) {
+  
+  
+  data.buffer.push("Show");
+  }
+
+  data.buffer.push("Index Route\n-----------\n\n");
+  hashTypes = {};
+  options = {hash:{},inverse:self.noop,fn:self.program(1, program1, data),contexts:[depth0],types:["STRING"],hashTypes:hashTypes,data:data};
+  stack2 = ((stack1 = helpers.linkTo),stack1 ? stack1.call(depth0, "route1.show", options) : helperMissing.call(depth0, "linkTo", "route1.show", options));
+  if(stack2 || stack2 === 0) { data.buffer.push(stack2); }
+  data.buffer.push("\n\n");
+  return buffer;
+  
+});
+
+Ember.TEMPLATES['route1/show'] = Ember.Handlebars.template(function anonymous(Handlebars,depth0,helpers,partials,data) {
+this.compilerInfo = [2,'>= 1.0.0-rc.3'];
+helpers = helpers || Ember.Handlebars.helpers; data = data || {};
+  var buffer = '', stack1, stack2, hashTypes, options, self=this, helperMissing=helpers.helperMissing;
+
+function program1(depth0,data) {
+  
+  
+  data.buffer.push("Index");
+  }
+
+  data.buffer.push("Show Route\n-----------\n\n");
+  hashTypes = {};
+  options = {hash:{},inverse:self.noop,fn:self.program(1, program1, data),contexts:[depth0],types:["STRING"],hashTypes:hashTypes,data:data};
+  stack2 = ((stack1 = helpers.linkTo),stack1 ? stack1.call(depth0, "route1.index", options) : helperMissing.call(depth0, "linkTo", "route1.index", options));
+  if(stack2 || stack2 === 0) { data.buffer.push(stack2); }
+  data.buffer.push("\n");
+  return buffer;
   
 });
 
@@ -46965,6 +47128,6 @@ helpers = helpers || Ember.Handlebars.helpers; data = data || {};
   
 
 
-  data.buffer.push("Route 2!!\n");
+  data.buffer.push("\n<br></br>\n<br></br>\n<br></br>\nRoute 2\n\n<br></br>\n<br></br>\n<br></br>\n\nRoute 2\n");
   
 });
